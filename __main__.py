@@ -1,12 +1,6 @@
 import argparse
 
-INTERVAL_TO_SEMITONES = {
-	"W": 2,
-	"H": 1
-}
-
 # ascending order
-# IONIAN = "WWHWWWH"
 IONIAN = [2, 2, 1, 2, 2, 2, 1]
 
 # calculating mode intervals
@@ -26,7 +20,7 @@ SCALES = {
 	"aeolian":      MODES[5],
 	"locrian":      MODES[6],
 
-	# other scales
+	# other scales; by no means complete
 	"melodic_minor":    [2, 1, 2, 2, 2, 2, 1],
 	"harmonic_minor":   [2, 1, 2, 2, 1, 3, 1],
 	"diminished":       [2, 1, 2, 1, 2, 1, 2, 1],
@@ -44,9 +38,36 @@ SCALES = {
 
 # synonyms
 SCALES["major"] = SCALES["ionian"]
-SCALES["natural_minor"] = SCALES["aeolian"]
+SCALES["natural_minor"] = SCALES["aeolian"] #this might not be correct
 
-BASE_NOTES = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#Bb", "B"]
+# with an offset of 0, the root is C
+DEFUALT_NOTE_NAMES = ["C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#Bb", "B"]
+ROOT_OFFSETS = {
+	"C": 0,
+	"D": 2,
+	"E": 4,
+	"F": 5,
+	"G": 7,
+	"A": 9,
+	"B": 11
+}
+
+# TODO: figure out how to name enharmonic notes
+for k, v in list(ROOT_OFFSETS.items()):
+	ROOT_OFFSETS[f'{k}#'] = (v + 1) % 12
+	ROOT_OFFSETS[f'{k}##'] = (v + 2) % 12
+	ROOT_OFFSETS[f'{k}b'] = (v - 1) % 12
+	ROOT_OFFSETS[f'{k}bb'] = (v - 2) % 12
+
+for i in range(len(DEFUALT_NOTE_NAMES)):
+	ROOT_OFFSETS[DEFUALT_NOTE_NAMES[i]] = i
+
+
+
+
+# Circle of 5ths
+# an offset of 0 is the major scale
+Co5s = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5]
 
 ## CHORDS
 # with reference to the major scale, this list defines the number of accumulated
@@ -70,6 +91,7 @@ SEMITONE_TO_INTERVAL = {
 	11:{"7"}
 }
 
+#source: https://lotusmusic.com/chordtree.html
 CHORD_SETS = {
 	"5":            {"root", "5"}, # power chord
 	"min6":         {"root", "b3", "5", "6"},
@@ -122,29 +144,32 @@ CHORD_SETS = {
 # 1st, 2nd, 3rd, 4th, 5th, 6th, 7th,
 MAJOR_SEMITONE_INTERVALS = [0, 2, 4, 5, 7, 9, 11]
 
+def note_from_semitone(st):
 
-def notes_in_scale(key, scale):
+	return DEFUALT_NOTE_NAMES[st]
+	# notes = []
+	# for k, v in ROOT_OFFSETS.items():
+	# 	if st == v:
+	# 		notes.append(k)
+	# return notes
+
+def notes_to_semitones(notes):
+	return [ROOT_OFFSETS[n] for n in notes]
+
+def notes_in_scale(key_st, scale):
 	notes_return = []
 	if scale in SCALES:
-		root_offset = -1
-
-		for i in range(len(BASE_NOTES)):
-			is_key_puretone = not ("#" in key or "b" in key)
-			is_note_puretone = not ("#" in BASE_NOTES[i] or "b" in BASE_NOTES[i])
-
-			if (is_note_puretone == is_key_puretone) and (key in BASE_NOTES[i]):
-				root_offset = i
-
-		if root_offset >= 0:
+		root_offset = key_st
+		if 12 > root_offset >= 0:
 			note_i = root_offset
 
-			notes_return.append(BASE_NOTES[note_i])
+			notes_return.append(note_i)
 			for distance in SCALES[scale]:
-				note_i = (note_i + distance) % len(BASE_NOTES)
-				notes_return.append(BASE_NOTES[note_i])
+				note_i = (note_i + distance) % 12
+				notes_return.append(note_i)
 
 		else:
-			print(f"{key} is not a valid key")
+			print(f"{key_st} is not a valid key")
 
 	else:
 		print(f"Entered scale {scale} not supported")
@@ -152,15 +177,17 @@ def notes_in_scale(key, scale):
 	return notes_return
 
 
-def available_chords_from_notes(notes):
-	for i in range(len(notes)):
+def available_chords_from_notes(notes_st):
+	return_chords = {}
+
+	for i in range(len(notes_st)):
 		# find the index in BASE_NOTES of the note at the root of the chord
-		root_note_i = BASE_NOTES.index(notes[i])
+		root_note_i = notes_st[i]
 
 
 		semitone_differences = set()
-		for note in notes:
-			ind_diff = BASE_NOTES.index(note) - root_note_i
+		for note in notes_st:
+			ind_diff = note - root_note_i
 			if ind_diff < 0:
 				ind_diff += 12
 			semitone_differences.add(ind_diff)
@@ -169,30 +196,55 @@ def available_chords_from_notes(notes):
 		for diff in semitone_differences:
 			semitone_intervals.update(SEMITONE_TO_INTERVAL[diff])
 
-		print(f"\n\n{BASE_NOTES[root_note_i]} chords that can be played in the scale:")
-		for k, v in CHORD_SETS.items():
-			if v.issubset(semitone_intervals):
-				print(k)
+		if notes_st[i] not in return_chords:
+			for k, v in CHORD_SETS.items():
+				if v.issubset(semitone_intervals):
+					return_chords[notes_st[i]] = return_chords.get(notes_st[i], [])
+					return_chords[notes_st[i]].append(k)
+	return return_chords
 
+def available_scales_from_notes(notes_st):
 
+	return_scales = []
+	# for each note, assume its the root
+	for j in range(len(notes_st)):
+		root_note = notes_st[j]
 
+		all_scales = SCALES.keys()
+		for scale in all_scales:
+			scale_notes = set(notes_in_scale(root_note, scale))
+			if set(notes_st).issubset(set(scale_notes)):
+				return_scales.append((scale, note_from_semitone(root_note)))
 
-
-	return semitone_intervals
-
+	return return_scales
 
 
 if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser()
-
-	parser.add_argument('Scale', help="Scale to use")
-	parser.add_argument('Key', help="Root key of the scale")
+	parser.add_argument("-mode", "--mode", default="chords", help="If chords, returns all valid chords in the given"
+	                                                              "scale/key. If scale, then the program will find all"
+	                                                              "valid scales for the given set of notes")
+	parser.add_argument('-scale', '--scale', help="Scale to use")
+	parser.add_argument('-key', '--key', help="Root key of the scale")
+	parser.add_argument("-notes", "--notes", help="The notes to match to scales")
 
 	args = parser.parse_args()
 
-	notes = notes_in_scale(args.Key, args.Scale)
-	print(notes)
-	print(available_chords_from_notes(notes))
+	if args.mode == "chords":
+		notes = notes_in_scale(notes_to_semitones([args.key])[0], args.scale)
+		print([note_from_semitone(n) for n in notes])
+		all_chords = available_chords_from_notes(notes)
+		for key, chords in all_chords.items():
+			print(f"\n\n{DEFUALT_NOTE_NAMES[key]} chords that can be played in {args.scale} {args.key}:")
+			print(chords)
+
+	if args.mode == "scale":
+		notes = args.notes.split(" ")
+		print(notes)
+		scales = available_scales_from_notes(notes_to_semitones(notes))
+		print(scales)
+
+
 
 
